@@ -1,36 +1,45 @@
 #!/bin/bash
 
-set -euo pipefail
-IFS=$'\n\t'
+echo "[+]------ Starting Subdomain Enumeration ------[+]"
 
-# Color codes for output
-GREEN="\e[32m"
-YELLOW="\e[33m"
-RED="\e[31m"
-NORMAL="\e[0m"
-BOLD="\e[1m"
+#starting sublist3r
+echo "[+] Starting Sublist3r [+]"
+sublist3r -d $1 -v -o ~/scripts/target/domains.txt
 
-domain="$1"
-base_dir="$(pwd)/results_$domain"
-mkdir -p "$base_dir"
+#starting subfinder
+echo "[+] Starting SubFinder [+]"
+subfinder -d $1 -o ~/scripts/target/domains2.txt
 
-echo -e "${BOLD}${GREEN}Starting Subdomain On $domain${NORMAL}"
+#Appending domains2 to domains
+cat ~/scripts/target/domains2.txt | tee -a ~/scripts/target/domains.txt
 
-# Create directories for categories
-mkdir -p "$base_dir/subdomains"
+#running assetfinder
+echo "[+] Starting Assetfinder [+]"
+assetfinder --subs-only $1 | tee -a ~/scripts/target/domains.txt
 
-# 1. Subdomain Enumeration
-echo -e "${GREEN}[*] Enumerating subdomains...${NORMAL}"
-subfinder -d "$domain" -o "$base_dir/subdomains/subfinder.txt"
-amass enum -d "$domain" -o "$base_dir/subdomains/amass.txt"
-/usr/bin/sublist3r -d "$domain" -o "$base_dir/subdomains/sublist3r.txt"
-assetfinder --subs-only "$domain" > "$base_dir/subdomains/assetfinder.txt"
+#starting csrt.sh
+echo "[+] Starting crt.sh [+]"
+~/scripts/crt.sh $1 | tee -a ~/scripts/target/domains.txt
 
+#starting dnscan.py
+~/scripts/dnscan_subdomain.sh $1
 
-cat "$base_dir/subdomains/"*.txt | sort -u > "$base_dir/subdomains/all_subdomains.txt"
-echo -e "${GREEN}[+] Total unique subdomains: $(wc -l < "$base_dir/subdomains/all_subdomains.txt")${NORMAL}"
+#running amass
+echo "[+] Starting Amass Passive Mode [+]"
+#- Passive mode
+amass enum --passive -d $1 | tee -a ~/scripts/target/domains.txt
 
+echo "[+] Starting Amass BruteForce Mode [+]"
+#- Bruteforce Verbose mode
+amass enum -brute -d $1 -v | tee -a ~/scripts/target/domains.txt
 
-echo -e "${GREEN}[*] Checking alive subdomains with httpx...${NORMAL}"
-httpx -silent -threads 50 -status-code -ip -title -location -tech-detect -l "$base_dir/subdomains/all_subdomains.txt" -o "$base_dir/subdomains/alive.txt"
-echo -e "${GREEN}[+] Alive subdomains saved to $base_dir/subdomains/alive.txt${NORMAL}"
+#removing duplicate entries
+echo "[+] Removing Duplicates [+]"
+sort -u ~/scripts/target/domains.txt -o ~/scripts/target/domains.txt
+rm ~/scripts/target/domains2.txt
+
+#checking for alive domains
+echo "[+] Checking for alive domains.. [+]"
+cat ~/scripts/target/domains.txt | httpx -follow-redirects -silent > ~/scripts/target/alive.txt
+
+echo "[-] Done [-]"
