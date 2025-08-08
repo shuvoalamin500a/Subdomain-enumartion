@@ -1,10 +1,45 @@
 #!/bin/bash
 
-echo "[+]------ Starting Sub-Subdomains Enumeration ------[+]"
+echo "[+]------ Starting Subdomain Enumeration ------[+]"
 
-echo "[+] Enumerating Sub-Subdomains [+]"
-cd ~/tools/altdns
-python3 -m altdns -i ~/scripts/target/alive.txt -o data_output -w words.txt -r -s ~/scripts/target/sub-subdomains.txt
+#starting sublist3r
+echo "[+] Starting Sublist3r [+]"
+sublist3r -d $1 -v -o ~/scripts/target/domains.txt
 
-echo "[+] Removing Trash Files [+]"
-[ -f data_output ] && rm data_output
+#starting subfinder
+echo "[+] Starting SubFinder [+]"
+subfinder -d $1 -o ~/scripts/target/domains2.txt
+
+#Appending domains2 to domains
+cat ~/scripts/target/domains2.txt | tee -a ~/scripts/target/domains.txt
+
+#running assetfinder
+echo "[+] Starting Assetfinder [+]"
+assetfinder --subs-only $1 | tee -a ~/scripts/target/domains.txt
+
+#starting csrt.sh
+echo "[+] Starting crt.sh [+]"
+~/scripts/crt.sh $1 | tee -a ~/scripts/target/domains.txt
+
+#starting dnscan.py
+~/scripts/dnscan_subdomain.sh $1
+
+#running amass
+echo "[+] Starting Amass Passive Mode [+]"
+#- Passive mode
+amass enum --passive -d $1 | tee -a ~/scripts/target/domains.txt
+
+echo "[+] Starting Amass BruteForce Mode [+]"
+#- Bruteforce Verbose mode
+amass enum -brute -d $1 -v | tee -a ~/scripts/target/domains.txt
+
+#removing duplicate entries
+echo "[+] Removing Duplicates [+]"
+sort -u ~/scripts/target/domains.txt -o ~/scripts/target/domains.txt
+rm ~/scripts/target/domains2.txt
+
+#checking for alive domains
+echo "[+] Checking for alive domains.. [+]"
+cat ~/scripts/target/domains.txt | httpx -follow-redirects -silent > ~/scripts/target/alive.txt
+
+echo "[-] Done [-]"
